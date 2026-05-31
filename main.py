@@ -65,6 +65,10 @@ def main():
     from fetchers.earnings import fetch_earnings_dates
     earnings = fetch_earnings_dates()
 
+    print("[INFO] 抓取 FRED 總經數據...")
+    from fetchers.fred import fetch_fred
+    macro = fetch_fred()
+
     print("[INFO] 抓取新聞(大盤 + 個股)...")
     from fetchers.news import fetch_market_news
     market_news = fetch_market_news(max_items=6)
@@ -96,7 +100,8 @@ def main():
         indices=indices, sectors=sectors, thematics=thematics,
         holdings=holdings, watchlist_data=watchlist_data,
         bottleneck=bottleneck, fg=fg, naaim=naaim, aaii=aaii,
-        news=news, market_news=market_news, earnings=earnings, is_sunday=is_sunday,
+        news=news, market_news=market_news, earnings=earnings,
+        macro=macro, is_sunday=is_sunday,
     )
 
     # ── 存本地（用專案根目錄為基準，避免相對路徑跑掉）──

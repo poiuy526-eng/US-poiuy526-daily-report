@@ -90,9 +90,10 @@ ACADEMY = {
 # ── 主組裝 ──────────────────────────────────────────────
 def build_mobile_html(
     report_date, indices, sectors, thematics, holdings, watchlist_data,
-    bottleneck, fg, naaim, aaii, news, earnings, market_news=None, is_sunday=False,
+    bottleneck, fg, naaim, aaii, news, earnings, market_news=None, macro=None, is_sunday=False,
 ):
     market_news = market_news or []
+    macro = macro or []
     ver = "週日深度版" if is_sunday else "平日版"
     P = []
     P.append(f'''<!DOCTYPE html><html lang="zh-Hant"><head>
@@ -112,11 +113,11 @@ def build_mobile_html(
     # ⓪ Brief
     spx = _find(indices, "^GSPC"); ndx = _find(indices, "^IXIC"); vix = _find(indices, "^VIX")
     bl = []
-    macro = []
-    if spx: macro.append(f'S&P {_arrow(spx["chg_pct"])}')
-    if ndx: macro.append(f'Nasdaq {_arrow(ndx["chg_pct"])}')
-    if vix: macro.append(f'VIX {_num(vix["close"])}')
-    if macro: bl.append("📊 " + "　".join(macro))
+    brief_idx = []
+    if spx: brief_idx.append(f'S&P {_arrow(spx["chg_pct"])}')
+    if ndx: brief_idx.append(f'Nasdaq {_arrow(ndx["chg_pct"])}')
+    if vix: brief_idx.append(f'VIX {_num(vix["close"])}')
+    if brief_idx: bl.append("📊 " + "　".join(brief_idx))
     if best: bl.append(f'🔥 最強：<b>{best["ticker"]} {_arrow(best["chg_pct"])}</b>')
     if naaim and naaim.get("latest") is not None:
         bl.append(f'🏛 機構 NAAIM <b>{naaim["latest"]}</b>' +
@@ -133,8 +134,20 @@ def build_mobile_html(
     macro_sum = "大盤方向 + 風險情緒(VIX) + 殖利率(估值) + 黃金(避險)。"
     if vix and vix.get("chg_pct") is not None:
         macro_sum += f' VIX {"下降→風險偏好升" if vix["chg_pct"] < 0 else "上升→避險升溫"}。'
+    # 總經數據區塊(FRED)
+    macro_html = ""
+    macro_items = [m for m in macro if isinstance(m, dict) and m.get("name")]
+    if macro_items:
+        chips = "".join(
+            f'<span style="display:inline-block;background:#fff7ed;border:1px solid #fed7aa;'
+            f'border-radius:6px;padding:3px 8px;margin:3px 3px 0 0;font-size:12.5px;color:#9a3412">'
+            f'{m["name"]} <b>{m["value"]}</b>{("・"+m["note"]) if m.get("note") else ""}</span>'
+            for m in macro_items)
+        macro_html = (f'<div style="margin-top:8px"><div style="font-size:12.5px;color:#64748b;margin-bottom:2px">'
+                      f'📈 總經數據(FRED)</div>{chips}</div>')
     P.append(f'''<div style="padding:0 16px 8px">{_title("① 總體環境")}
-<table style="width:100%;border-collapse:collapse;font-size:14px">{"".join(rows)}</table>{_summary(macro_sum)}</div>''')
+<table style="width:100%;border-collapse:collapse;font-size:14px">{"".join(rows)}</table>
+{macro_html}{_summary(macro_sum)}</div>''')
 
     # ② Sector Heatmap 完整
     all_sec = [s for s in (sectors + thematics) if s.get("chg_pct") is not None]
@@ -190,35 +203,14 @@ def build_mobile_html(
         return f'{t} <span style="color:#94a3b8;font-size:11.5px">{src}</span>'
 
     nh = []
-    # 🔥 重大事件(大盤/總經新聞,色塊)
+    # 🔥 重大事件(大盤/總經新聞,色塊)。個股新聞已併入 ⑪ 核心持股,此處不重複。
     if market_news:
-        nh.append('<div style="font-size:13.5px;font-weight:600;color:#b91c1c;margin-bottom:6px">🔥 重大事件</div>')
-        for n in market_news[:6]:
+        for n in market_news[:7]:
             nh.append(_box(f'📰 {_newslink(n)}', "#fef9f5", "", "#7c2d12"))
-    # 🎯 個股焦點(最強/最弱優先,再三劍客,再其餘持股)
-    nh.append('<div style="font-size:13.5px;font-weight:600;color:#1e40af;margin:10px 0 6px">🎯 個股焦點</div>')
-    order = []
-    if best: order.append(best["ticker"])
-    if worst and worst["ticker"] not in order: order.append(worst["ticker"])
-    for tk in ["CRWD", "NET", "DOCN"]:
-        if tk not in order: order.append(tk)
-    for h in holdings + watchlist_data:
-        if h["ticker"] not in order: order.append(h["ticker"])
-    shown = 0
-    foc = []
-    for tk in order:
-        items = news.get(tk, [])
-        if not items:
-            continue
-        q = _find(holdings + watchlist_data, tk)
-        chg = f' <span style="color:{_c(q["chg_pct"])};font-weight:600">{_arrow(q["chg_pct"])}</span>' if q and q.get("chg_pct") is not None else ''
-        lines = "".join(f'<div style="margin:1px 0 1px 4px">• {_newslink(n)}</div>' for n in items[:2])
-        foc.append(f'<div style="margin-bottom:7px"><b>{tk}</b>{chg}{lines}</div>')
-        shown += 1
-        if shown >= 8:
-            break
-    nh.append(f'<div style="font-size:13px;line-height:1.5;color:#1f2937">{"".join(foc) or "(個股新聞暫缺)"}</div>')
-    P.append(f'''<div style="padding:14px 16px 8px">{_title("④ 今日新聞快報")}{"".join(nh)}</div>''')
+    else:
+        nh.append('<div style="color:#94a3b8;font-size:13px">(大盤新聞暫缺)</div>')
+    P.append(f'''<div style="padding:14px 16px 8px">{_title("④ 今日新聞快報 · 大盤重大事件")}
+<div style="font-size:11.5px;color:#94a3b8;margin-bottom:6px">個股新聞請見 ⑪ 核心持股</div>{"".join(nh)}</div>''')
 
     # ⑥ 瓶頸輪動(每環節一張卡 + 議價力/結構訊號/觀察)
     from knowledge import BOTTLENECK_KB
@@ -363,8 +355,10 @@ def build_mobile_html(
         )
     nu = len([h for h in valid_h if h["chg_pct"] > 0])
     # 重點分析(資料驅動)
-    soft = [h["ticker"] for h in holdings if h["ticker"] in ("CRWD", "NET", "DOCN") and h.get("chg_pct", 0) > 0]
-    hard = [h["ticker"] for h in holdings if h["ticker"] in ("TSM", "COHR", "SMH") and h.get("chg_pct", 0) is not None and h.get("chg_pct", 0) < 0]
+    def _pos(h): return (h.get("chg_pct") or 0) > 0
+    def _neg(h): return (h.get("chg_pct") or 0) < 0
+    soft = [h["ticker"] for h in holdings if h["ticker"] in ("CRWD", "NET", "DOCN") and _pos(h)]
+    hard = [h["ticker"] for h in holdings if h["ticker"] in ("TSM", "COHR", "SMH") and _neg(h)]
     analysis = (f"{nu} 漲 {len(valid_h)-nu} 跌。最強 <b>{best['ticker']}</b>({_arrow(best['chg_pct'])})、"
                 f"最弱 <b>{worst['ticker']}</b>({_arrow(worst['chg_pct'])})。" if best and worst else "")
     if soft and hard:
