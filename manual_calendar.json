@@ -1,0 +1,9 @@
+{
+  "week_of": "2026-06-01",
+  "events": [
+    {"date": "06/01", "name": "ISM 製造業 PMI", "importance": "高"},
+    {"date": "06/02", "name": "JOLTS 職位空缺", "importance": "高"},
+    {"date": "06/03", "name": "ADP 就業 + ISM 服務業", "importance": "高"},
+    {"date": "06/05", "name": "NFP 非農 + 失業率", "importance": "高"}
+  ]
+}

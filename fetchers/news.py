@@ -36,7 +36,37 @@ def fetch_stock_news(tickers: list[str] = None, max_per_ticker: int = 3) -> dict
     return result
 
 
+def fetch_market_news(max_items: int = 6) -> list[dict]:
+    """抓大盤/總經新聞(SPY+QQQ 去重)"""
+    seen = set()
+    out = []
+    for tk in ["SPY", "QQQ"]:
+        try:
+            for n in (yf.Ticker(tk).news or []):
+                content = n.get("content", {})
+                title = content.get("title") or n.get("title", "")
+                if not title or title in seen:
+                    continue
+                seen.add(title)
+                url = ""
+                cp = content.get("canonicalUrl", {})
+                if isinstance(cp, dict):
+                    url = cp.get("url", "")
+                if not url:
+                    url = n.get("link", "")
+                prov = content.get("provider", {})
+                src = prov.get("displayName", "") if isinstance(prov, dict) else ""
+                out.append({"title": title, "url": url, "source": src})
+        except Exception as e:
+            print(f"[WARN] {tk} 大盤新聞抓取失敗: {e}")
+    return out[:max_items]
+
+
 if __name__ == "__main__":
+    print("=== 大盤新聞 ===")
+    for n in fetch_market_news():
+        print(f"  [{n['source']}] {n['title']}")
+    print("\n=== 個股新聞 ===")
     news = fetch_stock_news()
     for tk, items in news.items():
         print(f"\n=== {tk} ===")

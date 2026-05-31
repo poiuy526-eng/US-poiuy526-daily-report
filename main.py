@@ -65,8 +65,11 @@ def main():
     from fetchers.earnings import fetch_earnings_dates
     earnings = fetch_earnings_dates()
 
-    print("[INFO] 抓取個股新聞...")
-    news = fetch_stock_news()
+    print("[INFO] 抓取新聞(大盤 + 個股)...")
+    from fetchers.news import fetch_market_news
+    market_news = fetch_market_news(max_items=6)
+    # 三劍客 + 全部持股 + 觀察池都抓,新聞更豐富
+    news = fetch_stock_news(tickers=list(dict.fromkeys(CORE_HOLDINGS + WATCHLIST)), max_per_ticker=2)
 
     # ── 組報告 ──
     print("[INFO] 組裝報告...")
@@ -88,7 +91,7 @@ def main():
         indices=indices, sectors=sectors, thematics=thematics,
         holdings=holdings, watchlist_data=watchlist_data,
         bottleneck=bottleneck, fg=fg, naaim=naaim, aaii=aaii,
-        news=news, earnings=earnings, is_sunday=is_sunday,
+        news=news, market_news=market_news, earnings=earnings, is_sunday=is_sunday,
     )
 
     # ── 存本地（用專案根目錄為基準，避免相對路徑跑掉）──
