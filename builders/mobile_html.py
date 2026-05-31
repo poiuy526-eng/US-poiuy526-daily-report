@@ -245,16 +245,57 @@ def build_mobile_html(
     P.append(f'''<div style="padding:14px 16px 8px">{_title("⑥ 瓶頸輪動（5 環節）")}
 {"".join(cards)}{_summary(bn_sum)}</div>''')
 
-    # ⑦ 產業聚焦(資料驅動)
-    movers = sorted([q for q in (holdings + sum(bottleneck.values(), [])) if q.get("chg_pct") is not None],
-                    key=lambda x: x["chg_pct"], reverse=True)
-    focus = []
-    for q in movers[:2]:
-        focus.append(f'🟢 <b>{q["ticker"]} {_arrow(q["chg_pct"])}</b> 領漲，資金流入。')
-    for q in movers[-1:]:
-        focus.append(f'🔴 <b>{q["ticker"]} {_arrow(q["chg_pct"])}</b> 最弱，留意是否轉勢。')
-    P.append(f'''<div style="padding:14px 16px 8px">{_title("⑦ 產業聚焦")}
-<div style="font-size:13.5px;line-height:1.8;color:#1f2937">{"<br>".join(focus)}</div></div>''')
+    # ⑦ 產業聚焦(多主題比較 + 重點分析)
+    from knowledge import THEME_GROUPS
+    # 匯總當日所有可得漲跌
+    pool = {}
+    for q in (holdings + watchlist_data + sectors + thematics + sum(bottleneck.values(), [])):
+        if q.get("chg_pct") is not None and q["ticker"] not in pool:
+            pool[q["ticker"]] = q["chg_pct"]
+    # 算各主題平均
+    theme_stats = []
+    for theme, tks in THEME_GROUPS.items():
+        vals = [(tk, pool[tk]) for tk in tks if tk in pool]
+        if vals:
+            avg = sum(v for _, v in vals) / len(vals)
+            theme_stats.append({"theme": theme, "avg": avg, "members": vals})
+    theme_stats.sort(key=lambda x: x["avg"], reverse=True)
+
+    cards = []
+    for ts in theme_stats:
+        dot = _dot(ts["avg"])
+        members = "　".join(
+            f'{tk} <span style="color:{_c(v)};font-weight:600">{_arrow(v)}</span>' for tk, v in ts["members"]
+        )
+        cards.append(
+            f'<div style="padding:8px 0;border-bottom:1px solid #f1f5f9">'
+            f'<div style="font-weight:700;font-size:13.5px">{dot} {ts["theme"]} '
+            f'<span style="float:right;color:{_c(ts["avg"])}">{_arrow(ts["avg"])}</span></div>'
+            f'<div style="font-size:12.5px;color:#475569;margin-top:2px">{members}</div></div>'
+        )
+
+    # 重點分析(資料驅動:領漲 vs 落後主題)
+    focus_an = ""
+    if theme_stats:
+        lead = theme_stats[0]
+        lag = theme_stats[-1]
+        focus_an = (f'今日 <b>{lead["theme"]}</b> 領漲(均 {_arrow(lead["avg"])})、'
+                    f'<b>{lag["theme"]}</b> 最弱(均 {_arrow(lag["avg"])})。')
+        # 軟體 vs 半導體輪動觀察
+        soft = next((t for t in theme_stats if t["theme"] == "AI 軟體"), None)
+        semi = next((t for t in theme_stats if t["theme"] == "半導體/記憶體"), None)
+        if soft and semi:
+            if soft["avg"] > semi["avg"] + 1:
+                focus_an += " AI 資金<b>由半導體輪向軟體</b>(軟體強過半導體)。"
+            elif semi["avg"] > soft["avg"] + 1:
+                focus_an += " AI 資金<b>偏硬體/半導體</b>(半導體強過軟體)。"
+            else:
+                focus_an += " AI 軟硬體同步,題材全面。"
+    P.append(f'''<div style="padding:14px 16px 8px">{_title("⑦ 產業聚焦（主題比較）")}
+<div style="font-size:11.5px;color:#94a3b8;margin-bottom:6px">各主題=代表個股當日平均，由強到弱</div>
+{"".join(cards)}
+<div style="background:#eef2ff;border-radius:8px;padding:11px;margin-top:10px;font-size:13px;color:#3730a3;line-height:1.6">
+<b>🔍 重點分析：</b>{focus_an}</div></div>''')
 
     # ⑧ 廣域產業雷達(結構主題)
     rklb = _find(watchlist_data, "RKLB")
