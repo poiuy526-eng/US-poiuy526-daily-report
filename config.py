@@ -1,7 +1,8 @@
 from datetime import date
 
 # --- 核心持股 ---
-CORE_HOLDINGS = ["TSLA", "CRCL", "CRWD", "GOOGL", "SMH", "TSM", "VRT", "COHR", "NET", "DOCN"]
+CORE_HOLDINGS = ["TSLA", "CRCL", "CRWD", "GOOGL", "SMH", "TSM", "VRT", "COHR", "NET", "DOCN",
+                 "DRAM", "NASA"]
 
 # --- 觀察池 ---
 WATCHLIST = ["RKLB"]
