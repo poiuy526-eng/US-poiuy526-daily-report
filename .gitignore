@@ -7,6 +7,9 @@ venv/
 # 產出報告(可重新生成,不需版控)
 output/
 
+# 翻譯快取(自動生成)
+translate_cache.json
+
 # 任何可能含密碼/金鑰的檔案(保險)
 *.env
 .env

@@ -183,7 +183,7 @@ def build_mobile_html(
 
     # ④ 今日新聞快報(大盤重大事件 + 持股個股焦點,豐富版)
     def _newslink(n):
-        t = n["title"]
+        t = n.get("title_zh") or n["title"]  # 優先用中文
         src = n.get("source", "")
         if n.get("url"):
             t = f'<a href="{n["url"]}" style="color:inherit;text-decoration:none">{t}</a>'
@@ -287,24 +287,53 @@ def build_mobile_html(
         P.append(f'''<div style="padding:14px 16px 8px">{_title("⑩ 低點布局（觀察非建議）", "#0d9488")}
 {_box(db, "#f0fdfa", "", "#134e4a")}</div>''')
 
-    # ⑪ 核心持股(代號/價/漲跌 + 重點定位)
+    # ⑪ 核心持股(代號/價/漲跌 + 重點分析:方向+定位+催化劑+當日新聞)
     from knowledge import HOLDINGS_KB
+    def _dir_word(chg):
+        if chg is None:
+            return "—"
+        if chg >= 3:
+            return "▲ 強漲"
+        if chg > 0:
+            return "▲ 上漲"
+        if chg <= -3:
+            return "▼ 重挫"
+        if chg < 0:
+            return "▼ 回落"
+        return "⚪ 持平"
     cards = []
     for q in holdings:
         kb = HOLDINGS_KB.get(q["ticker"], {})
         pos = kb.get("定位", "")
         cat = kb.get("催化劑", "")
+        # 當日新聞(中文)一句話
+        ni = news.get(q["ticker"], [])
+        news_zh = (ni[0].get("title_zh") or ni[0].get("title", "")) if ni else ""
+        news_line = f'<div style="font-size:12px;color:#475569;margin-top:3px">📰 {news_zh}</div>' if news_zh else ""
         cards.append(
-            f'<div style="padding:8px 0;border-bottom:1px solid #f1f5f9">'
-            f'<div><b>{q["ticker"]}</b> <span style="color:#475569">{_price(q["close"])}</span> '
-            f'<span style="color:{_c(q["chg_pct"])};font-weight:600;float:right">{_arrow(q["chg_pct"])}</span></div>'
-            f'<div style="font-size:12px;color:#64748b;margin-top:2px">{pos}'
-            f'{("　🎯 " + cat) if cat else ""}</div></div>'
+            f'<div style="padding:9px 0;border-bottom:1px solid #f1f5f9">'
+            f'<div><b style="font-size:14px">{q["ticker"]}</b> '
+            f'<span style="color:#475569">{_price(q["close"])}</span> '
+            f'<span style="color:{_c(q["chg_pct"])};font-weight:700;float:right">'
+            f'{_dir_word(q["chg_pct"])} {_arrow(q["chg_pct"])}</span></div>'
+            f'<div style="font-size:12px;color:#64748b;margin-top:3px">'
+            f'<b>{pos}</b>{("　🎯 " + cat) if cat else ""}</div>'
+            f'{news_line}</div>'
         )
     nu = len([h for h in valid_h if h["chg_pct"] > 0])
-    h_sum = f"{nu} 漲 {len(valid_h)-nu} 跌。最強 {best['ticker']}、最弱 {worst['ticker']}。" if best and worst else ""
-    P.append(f'''<div style="padding:14px 16px 8px">{_title("⑪ 核心持股")}
-<div style="font-size:14px">{"".join(cards)}</div>{_summary(h_sum)}</div>''')
+    # 重點分析(資料驅動)
+    soft = [h["ticker"] for h in holdings if h["ticker"] in ("CRWD", "NET", "DOCN") and h.get("chg_pct", 0) > 0]
+    hard = [h["ticker"] for h in holdings if h["ticker"] in ("TSM", "COHR", "SMH") and h.get("chg_pct", 0) is not None and h.get("chg_pct", 0) < 0]
+    analysis = (f"{nu} 漲 {len(valid_h)-nu} 跌。最強 <b>{best['ticker']}</b>({_arrow(best['chg_pct'])})、"
+                f"最弱 <b>{worst['ticker']}</b>({_arrow(worst['chg_pct'])})。" if best and worst else "")
+    if soft and hard:
+        analysis += f" 軟體({'/'.join(soft)})強、硬體({'/'.join(hard)})弱 → 組合內資金<b>由硬體輪向軟體</b>。"
+    elif soft:
+        analysis += f" 軟體({'/'.join(soft)})領漲,AI 軟體題材延續。"
+    P.append(f'''<div style="padding:14px 16px 8px">{_title("⑪ 核心持股快照")}
+<div style="font-size:14px">{"".join(cards)}</div>
+<div style="background:#eef2ff;border-radius:8px;padding:11px;margin-top:10px;font-size:13px;color:#3730a3;line-height:1.6">
+<b>🔍 重點分析：</b>{analysis}</div></div>''')
 
     # ⑫ 十倍股觀察池(完整卡片:十倍邏輯/觀察/風險)
     from knowledge import TENBAGGER_POOL

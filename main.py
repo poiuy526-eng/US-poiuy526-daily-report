@@ -71,6 +71,11 @@ def main():
     # 三劍客 + 全部持股 + 觀察池都抓,新聞更豐富
     news = fetch_stock_news(tickers=list(dict.fromkeys(CORE_HOLDINGS + WATCHLIST)), max_per_ticker=2)
 
+    print("[INFO] 新聞翻譯成繁中...")
+    from utils.translate import translate_news, translate_list
+    translate_news(news)
+    translate_list(market_news)
+
     # ── 組報告 ──
     print("[INFO] 組裝報告...")
     report_md = build_full_report(
