@@ -29,8 +29,10 @@ SECTOR_ETFS = {
 THEMATIC_ETFS = {
     "半導體 SMH": "SMH",
     "半導體 SOXX": "SOXX",
+    "記憶體 DRAM": "DRAM",
     "軟體 IGV": "IGV",
     "機器人 BOTZ": "BOTZ",
+    "太空 NASA": "NASA",
     "小型股 IWM": "IWM",
     "國防 ITA": "ITA",
     "區域銀行 KRE": "KRE",

@@ -81,10 +81,10 @@ BOTTLENECK_KB = {
 # 每個主題列代表性 ticker,builder 會用當日實際漲跌算主題強弱
 THEME_GROUPS = {
     "AI 軟體": ["IGV", "CRWD", "NET", "DOCN"],
-    "半導體/記憶體": ["SMH", "SOXX", "TSM", "MU"],
+    "半導體/記憶體": ["SMH", "SOXX", "TSM", "MU", "DRAM"],
     "光通訊互連": ["COHR", "GLW"],
     "AI 電力/核電": ["VRT", "GEV", "CEG"],
-    "太空/國防": ["RKLB", "ITA"],
+    "太空/國防": ["RKLB", "ITA", "NASA"],
     "金融/銀行": ["XLF", "KRE"],
     "貴金屬": ["GLD", "GOLD"],
     "稀土/上游": ["MP", "ALB"],

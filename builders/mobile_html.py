@@ -149,24 +149,43 @@ def build_mobile_html(
 <table style="width:100%;border-collapse:collapse;font-size:14px">{"".join(rows)}</table>
 {macro_html}{_summary(macro_sum)}</div>''')
 
-    # ② Sector Heatmap 完整
+    # ② Sector Heatmap(只顯示最強5+最弱5,共10檔)
     all_sec = [s for s in (sectors + thematics) if s.get("chg_pct") is not None]
     all_sec.sort(key=lambda x: x["chg_pct"], reverse=True)
-    rows = [_row([_td(f'{_dot(q["chg_pct"])} {q.get("name", q["ticker"])}'),
-                  _td(q["ticker"], "left", "#64748b"),
-                  _td(_arrow(q["chg_pct"]), "right", _c(q["chg_pct"]), "600")], i % 2 == 0)
-            for i, q in enumerate(all_sec)]
     nup = len([s for s in all_sec if s["chg_pct"] > 0])
+    ndn = len([s for s in all_sec if s["chg_pct"] < 0])
+    # 取頭5尾5(去重)
+    if len(all_sec) > 10:
+        shown_sec = all_sec[:5] + all_sec[-5:]
+    else:
+        shown_sec = all_sec
+    rows = []
+    for i, q in enumerate(shown_sec):
+        # 頭尾之間插分隔
+        if len(all_sec) > 10 and i == 5:
+            rows.append('<tr><td colspan="3" style="padding:3px 6px;text-align:center;color:#cbd5e1;font-size:11px">··· 中段 '
+                        f'{len(all_sec)-10} 檔略 ···</td></tr>')
+        rows.append(_row([_td(f'{_dot(q["chg_pct"])} {q.get("name", q["ticker"])}'),
+                          _td(q["ticker"], "left", "#64748b"),
+                          _td(_arrow(q["chg_pct"]), "right", _c(q["chg_pct"]), "600")], i % 2 == 0))
+    # 豐富總結
     if all_sec:
         st, wk = all_sec[0], all_sec[-1]
-        breadth = "廣度極窄(資金高度集中)，留意背離" if nup <= len(all_sec) // 3 else \
-                  ("廣度健康" if nup >= len(all_sec) * 2 // 3 else "廣度中性")
-        sec_sum = (f"{nup}/{len(all_sec)} 上漲。最強 {st.get('name')}({_arrow(st['chg_pct'])})、"
-                   f"最弱 {wk.get('name')}({_arrow(wk['chg_pct'])})。{breadth}。")
+        breadth = ("廣度極窄(資金高度集中單一主題),為中期背離警訊" if nup <= len(all_sec) // 3
+                   else "廣度健康(普漲)" if nup >= len(all_sec) * 2 // 3
+                   else "廣度中性(漲跌互見)")
+        # 領漲/落後主題群(取前3、後3)
+        top3 = "、".join(f'{s.get("name")}({_arrow(s["chg_pct"])})' for s in all_sec[:3])
+        bot3 = "、".join(f'{s.get("name")}({_arrow(s["chg_pct"])})' for s in all_sec[-3:])
+        spread = st["chg_pct"] - wk["chg_pct"]
+        sec_sum = (f"全 {len(all_sec)} 檔中 <b>{nup} 漲 / {ndn} 跌</b>，{breadth}。<br>"
+                   f"🔼 領漲：{top3}<br>🔽 落後：{bot3}<br>"
+                   f"強弱差 {spread:.2f} 個百分點 — "
+                   f"{'資金分歧大、明顯主題輪動' if spread > 5 else '類股同向、系統性行情'}。")
     else:
         sec_sum = "資料暫缺。"
-    P.append(f'''<div style="padding:14px 16px 8px">{_title("② Sector Heatmap（完整）")}
-<div style="font-size:11.5px;color:#94a3b8;margin-bottom:8px">SPDR 11 大類股 + 主題 ETF 全列，由強到弱</div>
+    P.append(f'''<div style="padding:14px 16px 8px">{_title("② Sector Heatmap")}
+<div style="font-size:11.5px;color:#94a3b8;margin-bottom:8px">顯示最強 5 + 最弱 5（共 {len(all_sec)} 檔追蹤）</div>
 <table style="width:100%;border-collapse:collapse;font-size:13.5px">{"".join(rows)}</table>{_summary(sec_sum)}</div>''')
 
     # ③ 市場情緒
