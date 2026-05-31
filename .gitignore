@@ -1,0 +1,14 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# 產出報告(可重新生成,不需版控)
+output/
+
+# 任何可能含密碼/金鑰的檔案(保險)
+*.env
+.env
+*secret*
+*password*

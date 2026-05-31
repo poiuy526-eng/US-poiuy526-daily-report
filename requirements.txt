@@ -1,0 +1,4 @@
+# 美股日報專案依賴
+# 安裝:python -m pip install -r requirements.txt
+yfinance>=0.2.40
+# 其餘 (smtplib / urllib / email / json) 皆為 Python 標準庫,免安裝
