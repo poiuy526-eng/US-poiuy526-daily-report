@@ -24,6 +24,22 @@ SECTOR_ETFS = {
     "通訊 XLC": "XLC",
 }
 
+# --- 主題 / 半導體 / 避險 ETF(Sector Heatmap 完整版用)---
+THEMATIC_ETFS = {
+    "半導體 SMH": "SMH",
+    "半導體 SOXX": "SOXX",
+    "軟體 IGV": "IGV",
+    "機器人 BOTZ": "BOTZ",
+    "小型股 IWM": "IWM",
+    "國防 ITA": "ITA",
+    "區域銀行 KRE": "KRE",
+    "生技 XBI": "XBI",
+    "公債 TLT": "TLT",
+    "黃金 GLD": "GLD",
+    "波動 VXX": "VXX",
+    "鈾 URA": "URA",
+}
+
 # --- 瓶頸輪動五節點 ---
 BOTTLENECK_NODES = {
     "HBM/DRAM 記憶體": ["MU"],

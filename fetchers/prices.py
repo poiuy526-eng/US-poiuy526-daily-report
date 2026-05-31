@@ -59,6 +59,19 @@ def fetch_sector_etfs() -> list[dict]:
     return results
 
 
+def fetch_thematic_etfs() -> list[dict]:
+    from config import THEMATIC_ETFS
+    results = []
+    for name, tk in THEMATIC_ETFS.items():
+        q = _fetch_quote(tk)
+        if q:
+            q["name"] = name
+        else:
+            q = {"ticker": tk, "name": name, "close": None, "chg_pct": None, "volume": None}
+        results.append(q)
+    return results
+
+
 def fetch_bottleneck_nodes() -> dict[str, list[dict]]:
     results = {}
     for node, tickers in BOTTLENECK_NODES.items():
