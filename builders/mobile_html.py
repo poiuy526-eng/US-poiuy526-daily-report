@@ -314,7 +314,8 @@ ACADEMY = {
 # ── 主組裝 ──────────────────────────────────────────────
 def build_mobile_html(
     report_date, indices, sectors, thematics, holdings, watchlist_data,
-    bottleneck, fg, naaim, aaii, news, earnings, market_news=None, macro=None, is_sunday=False,
+    bottleneck, fg, naaim, aaii, news, earnings, market_news=None, macro=None,
+    is_sunday=False, narrative=None,
 ):
     market_news = market_news or []
     macro = macro or []
@@ -446,14 +447,23 @@ def build_mobile_html(
         return f'{t} <span style="color:#94a3b8;font-size:11.5px">{src}</span>'
 
     nh = []
-    # 🔥 重大事件(大盤/總經新聞,色塊)。個股新聞已併入 ⑪ 核心持股,此處不重複。
+    # ⭐ LLM 深度分析:重大事件(有 narrative 時優先呈現,含因果詮釋)
+    events = (narrative or {}).get("major_events") or []
+    for ev in events:
+        title = ev.get("title", "")
+        detail = ev.get("detail", "")
+        nh.append(
+            f'<div style="border-left:3px solid #ea580c;background:#fff7ed;border-radius:6px;'
+            f'padding:10px;margin-bottom:8px;font-size:13px;line-height:1.6;color:#7c2d12">'
+            f'<b>⭐ {title}</b><br><span style="color:#9a3412">{detail}</span></div>')
+    # 🔥 大盤新聞標題(色塊)。個股新聞已併入 ⑪ 核心持股。
     if market_news:
-        for n in market_news[:7]:
+        for n in market_news[:5 if events else 7]:
             nh.append(_box(f'📰 {_newslink(n)}', "#fef9f5", "", "#7c2d12"))
-    else:
+    elif not events:
         nh.append('<div style="color:#94a3b8;font-size:13px">(大盤新聞暫缺)</div>')
     P.append(f'''<div style="padding:14px 16px 8px">{_title("④ 今日新聞快報 · 大盤重大事件")}
-<div style="font-size:11.5px;color:#94a3b8;margin-bottom:6px">個股新聞請見 ⑪ 核心持股</div>{"".join(nh)}</div>''')
+<div style="font-size:11.5px;color:#94a3b8;margin-bottom:6px">{"⭐=AI 深度分析｜" if events else ""}個股新聞請見 ⑪ 核心持股</div>{"".join(nh)}</div>''')
 
     # ⑤ 社群熱度 + 真偽辯論台(熱度Top5 + 資料驅動選題 + 五維評估)
     from knowledge import DEBATE_POOL, STOCK_DEBATE
@@ -578,8 +588,16 @@ def build_mobile_html(
             f'{("<br>" + spx_line.strip()) if spx_line else ""}<br>'
             f'<span style="color:#cbd5e1">強弱差 {ld["avg"]-lg["avg"]:.2f}pp — '
             f'{"資金明確選邊、主題輪動" if (ld["avg"]-lg["avg"]) > 5 else "類股分歧溫和"}</span></div>')
+    # ⭐ LLM 深度主線(有 narrative 時置頂呈現)
+    storylines = (narrative or {}).get("storylines") or []
+    story_html = ""
+    for s in storylines:
+        story_html += (
+            f'<div style="border-left:3px solid #2563eb;background:#eff6ff;border-radius:6px;'
+            f'padding:10px;margin-bottom:8px;font-size:13px;line-height:1.65;color:#1e3a8a">'
+            f'<b>⭐ {s.get("headline","")}</b><br><span style="color:#1f2937">{s.get("body","")}</span></div>')
     P.append(f'''<div style="padding:14px 16px 8px">{_title("⑦ 產業聚焦（主題比較）")}
-{dash}<div style="font-size:11.5px;color:#94a3b8;margin-bottom:6px">各主題=代表個股當日平均，由強到弱</div>
+{story_html}{dash}<div style="font-size:11.5px;color:#94a3b8;margin-bottom:6px">各主題=代表個股當日平均，由強到弱</div>
 {"".join(cards)}
 <div style="background:#eef2ff;border-radius:8px;padding:11px;margin-top:10px;font-size:13px;color:#3730a3;line-height:1.6">
 <b>🔍 重點分析：</b>{focus_an}</div></div>''')

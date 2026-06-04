@@ -80,6 +80,14 @@ def main():
     translate_news(news)
     translate_list(market_news)
 
+    print("[INFO] LLM 深度敘事(§④/§⑦,需 ANTHROPIC_API_KEY)...")
+    from fetchers.llm_narrative import generate_narrative
+    narrative = generate_narrative(
+        report_date=report_date, indices=indices, holdings=holdings,
+        sectors=sectors, thematics=thematics, bottleneck=bottleneck,
+        news=news, market_news=market_news, fg=fg, naaim=naaim, aaii=aaii,
+    )
+
     # ── 組報告 ──
     print("[INFO] 組裝報告...")
     report_md = build_full_report(
@@ -101,7 +109,7 @@ def main():
         holdings=holdings, watchlist_data=watchlist_data,
         bottleneck=bottleneck, fg=fg, naaim=naaim, aaii=aaii,
         news=news, market_news=market_news, earnings=earnings,
-        macro=macro, is_sunday=is_sunday,
+        macro=macro, is_sunday=is_sunday, narrative=narrative,
     )
 
     # ── 存本地（用專案根目錄為基準，避免相對路徑跑掉）──
