@@ -126,6 +126,32 @@ def _dirw(chg, up="走強", flat="持平", down="回落"):
     return up if chg > 0 else (down if chg < 0 else flat)
 
 
+def _heat_top5(holdings, watchlist_data, thematics):
+    """🔥 熱度 Top5:依 |當日漲跌| 取前 5,給 🔥 數量與訊號文字。"""
+    seen, items = set(), []
+    for q in (holdings + watchlist_data + thematics):
+        t, c = q.get("ticker"), q.get("chg_pct")
+        if t and c is not None and t not in seen:
+            seen.add(t); items.append((t, c))
+    items.sort(key=lambda x: abs(x[1]), reverse=True)
+    out = []
+    for t, c in items[:5]:
+        a = abs(c)
+        fire = "🔥🔥🔥🔥🔥" if a >= 8 else "🔥🔥🔥🔥" if a >= 5 else "🔥🔥🔥" if a >= 3 else "🔥🔥" if a >= 1.5 else "🔥"
+        if c >= 5:
+            sig = "強漲,追價熱"
+        elif c > 0:
+            sig = "上漲,留意延續"
+        elif c <= -8:
+            sig = "重挫,恐慌賣壓"
+        elif c <= -3:
+            sig = "下跌,留意支撐"
+        else:
+            sig = "回落"
+        out.append((t, c, fire, sig))
+    return out
+
+
 def _asia_handoff(holdings, watchlist_data, sectors, thematics, bottleneck, indices):
     """§⑮ 亞太接棒:分 台/日/中/匯,依當日實際數據條件式生成。"""
     pool = _chg_pool(holdings, watchlist_data, sectors, thematics, sum(bottleneck.values(), []))
@@ -429,21 +455,42 @@ def build_mobile_html(
     P.append(f'''<div style="padding:14px 16px 8px">{_title("④ 今日新聞快報 · 大盤重大事件")}
 <div style="font-size:11.5px;color:#94a3b8;margin-bottom:6px">個股新聞請見 ⑪ 核心持股</div>{"".join(nh)}</div>''')
 
-    # ⑤ 真偽辯論台(資料驅動選題:大幅波動個股 > 軟硬體輪動 > AI capex)
+    # ⑤ 社群熱度 + 真偽辯論台(熱度Top5 + 資料驅動選題 + 五維評估)
     from knowledge import DEBATE_POOL, STOCK_DEBATE
+    # 🔥 熱度 Top5:依當日 |漲跌| 排序
+    heat_rows = _heat_top5(holdings, watchlist_data, thematics)
+    heat_html = "".join(
+        f'<tr style="background:{"#f8fafc" if i % 2 == 0 else "#fff"}">'
+        f'<td style="padding:6px;color:#64748b">{["①","②","③","④","⑤"][i]}</td>'
+        f'<td style="padding:6px;font-weight:600">{t}</td>'
+        f'<td style="padding:6px">{fire}</td>'
+        f'<td style="padding:6px;text-align:right;color:{_c(c)};font-weight:600">{_arrow(c)}</td>'
+        f'<td style="padding:6px;color:#475569;font-size:12px">{sig}</td></tr>'
+        for i, (t, c, fire, sig) in enumerate(heat_rows))
+    # ⚖️ 辯論台
     debate, data_line = _pick_debate(holdings, watchlist_data, sectors, thematics,
                                      bottleneck, DEBATE_POOL, STOCK_DEBATE)
+    debate_html = ""
     if debate:
         bull = "".join(f'<li>{x}</li>' for x in debate["bull"])
         bear = "".join(f'<li>{x}</li>' for x in debate["bear"])
-        P.append(f'''<div style="padding:14px 16px 8px">{_title("⑤ 真偽辯論台", "#ea580c")}
-<div style="font-size:13.5px;font-weight:700;color:#0f172a;margin-bottom:8px">主題：{debate["topic"]}</div>
+        assess = debate["assess"]
+        if isinstance(assess, dict):
+            assess_html = "".join(
+                f'<div style="margin-top:3px">• <b>{k}：</b>{v}</div>' for k, v in assess.items())
+        else:
+            assess_html = assess
+        debate_html = f'''<div style="font-size:13px;font-weight:700;color:#0f172a;margin:12px 0 8px">⚖️ 辯論台：{debate["topic"]}</div>
 {(f'<div style="font-size:12px;color:#64748b;margin-bottom:8px">📊 當日數據：{data_line}</div>') if data_line else ""}
 <div style="display:flex;gap:8px;flex-wrap:wrap">
 <div style="flex:1;min-width:200px;border:1px solid #bbf7d0;background:#f0fdf4;border-radius:8px;padding:10px;font-size:12.5px;line-height:1.55;color:#14532d"><b>🐂 多方</b><ul style="margin:4px 0 0 16px;padding:0">{bull}</ul></div>
 <div style="flex:1;min-width:200px;border:1px solid #fecaca;background:#fef2f2;border-radius:8px;padding:10px;font-size:12.5px;line-height:1.55;color:#7f1d1d"><b>🐻 空方</b><ul style="margin:4px 0 0 16px;padding:0">{bear}</ul></div>
 </div>
-<div style="background:#eef2ff;border-radius:8px;padding:10px;margin-top:8px;font-size:12.5px;line-height:1.6;color:#3730a3"><b>📊 Claude 評估：</b>{debate["assess"]}</div></div>''')
+<div style="background:#eef2ff;border-radius:8px;padding:10px;margin-top:8px;font-size:12.5px;line-height:1.6;color:#3730a3"><b>📊 Claude 評估</b>{assess_html}</div>'''
+    P.append(f'''<div style="padding:14px 16px 8px">{_title("⑤ 社群熱度 + 真偽辯論台", "#ea580c")}
+<div style="font-size:13px;font-weight:700;color:#0f172a;margin-bottom:6px">🔥 熱度 Top 5</div>
+<table style="width:100%;border-collapse:collapse;font-size:13px">{heat_html}</table>
+{debate_html}</div>''')
 
     # ⑥ 瓶頸輪動(每環節一張卡 + 議價力/結構訊號/觀察)
     from knowledge import BOTTLENECK_KB
@@ -516,24 +563,49 @@ def build_mobile_html(
                 focus_an += " AI 資金<b>偏硬體/半導體</b>(半導體強過軟體)。"
             else:
                 focus_an += " AI 軟硬體同步,題材全面。"
+    # 數據儀表板:最強 vs 最弱主題的世紀分歧(含成分股)
+    dash = ""
+    if theme_stats and len(theme_stats) >= 2:
+        ld, lg = theme_stats[0], theme_stats[-1]
+        ld_m = " / ".join(f'{tk} {_arrow(v)}' for tk, v in ld["members"][:4])
+        lg_m = " / ".join(f'{tk} {_arrow(v)}' for tk, v in lg["members"][:4])
+        spx_line = f'　大盤 S&P 500 {_arrow(spx["chg_pct"])}' if spx and spx.get("chg_pct") is not None else ""
+        dash = (
+            f'<div style="background:#0f172a;color:#e2e8f0;border-radius:8px;padding:11px;margin-bottom:10px;font-size:12.5px;line-height:1.7">'
+            f'<b>📟 板塊分歧儀表板</b><br>'
+            f'🟢 最強 <b>{ld["theme"]}</b> {_arrow(ld["avg"])}<br><span style="color:#94a3b8">　{ld_m}</span><br>'
+            f'🔴 最弱 <b>{lg["theme"]}</b> {_arrow(lg["avg"])}<br><span style="color:#94a3b8">　{lg_m}</span>'
+            f'{("<br>" + spx_line.strip()) if spx_line else ""}<br>'
+            f'<span style="color:#cbd5e1">強弱差 {ld["avg"]-lg["avg"]:.2f}pp — '
+            f'{"資金明確選邊、主題輪動" if (ld["avg"]-lg["avg"]) > 5 else "類股分歧溫和"}</span></div>')
     P.append(f'''<div style="padding:14px 16px 8px">{_title("⑦ 產業聚焦（主題比較）")}
-<div style="font-size:11.5px;color:#94a3b8;margin-bottom:6px">各主題=代表個股當日平均，由強到弱</div>
+{dash}<div style="font-size:11.5px;color:#94a3b8;margin-bottom:6px">各主題=代表個股當日平均，由強到弱</div>
 {"".join(cards)}
 <div style="background:#eef2ff;border-radius:8px;padding:11px;margin-top:10px;font-size:13px;color:#3730a3;line-height:1.6">
 <b>🔍 重點分析：</b>{focus_an}</div></div>''')
 
-    # ⑧ 廣域產業雷達(結構主題)
+    # ⑧ 廣域產業雷達(RADAR_KB 卡片 + 注入當日太空股漲跌)
+    from knowledge import RADAR_KB
     rklb = _find(watchlist_data, "RKLB")
-    rklb_px = f'（{_arrow(rklb["chg_pct"])}）' if rklb and rklb.get("chg_pct") is not None else ''
-    radar = (
-        f'🚀 <b>太空/國防</b>（本週主題）<br>'
-        f'RKLB{rklb_px} Neutron H2 2026 首飛｜SpaceX IPO 題材｜ASTS 衛星｜LMT/NOC/RTX 國防主線<br><br>'
-        f'🤖 <b>機器人/Physical AI</b>（下一輪）<br>'
-        f'TSLA Optimus 量產｜NVDA Isaac/GR00T 模擬平台｜諧波減速器(6324.JP)｜詳見 ⑨ 學堂<br><br>'
-        f'🥇 <b>貴金屬</b>：黃金避險+通膨對沖需求延續　⚡ <b>核電/SMR</b>：CEG/OKLO/SMR'
-    )
+    nasa = _find(holdings, "NASA")
+    live_bits = []
+    if rklb and rklb.get("chg_pct") is not None:
+        live_bits.append(f'RKLB {_arrow(rklb["chg_pct"])}')
+    if nasa and nasa.get("chg_pct") is not None:
+        live_bits.append(f'NASA(太空 ETF) {_arrow(nasa["chg_pct"])}')
+    radar_cards = []
+    for ci, card in enumerate(RADAR_KB.get("cards", [])):
+        lines = list(card["lines"])
+        if ci == 0 and live_bits:  # 本週主題卡注入即時數據
+            lines.insert(0, "<b>今日:</b> " + "、".join(live_bits))
+        body = "<br>".join("・" + ln for ln in lines)
+        radar_cards.append(
+            f'<div style="border:1px solid #e5e7eb;border-radius:8px;padding:10px;margin-bottom:8px">'
+            f'<div style="font-weight:700;font-size:13.5px;color:#0f172a">{card["icon"]} {card["title"]}</div>'
+            f'<div style="font-size:12.5px;color:#475569;line-height:1.65;margin-top:4px">{body}</div></div>')
     P.append(f'''<div style="padding:14px 16px 8px">{_title("⑧ 廣域產業雷達")}
-<div style="font-size:13px;line-height:1.7;color:#1f2937">{radar}</div></div>''')
+<div style="font-size:11.5px;color:#94a3b8;margin-bottom:6px">本週主題：{RADAR_KB.get("weekly_theme","")}</div>
+{"".join(radar_cards)}</div>''')
 
     # ⑨ 產業學堂(週日)
     if is_sunday:
