@@ -111,6 +111,166 @@ def _pick_debate(holdings, watchlist_data, sectors, thematics, bottleneck,
     return debate_pool["ai_capex"], None
 
 
+def _chg_pool(*lists):
+    pool = {}
+    for lst in lists:
+        for q in lst:
+            if q.get("chg_pct") is not None and q["ticker"] not in pool:
+                pool[q["ticker"]] = q["chg_pct"]
+    return pool
+
+
+def _dirw(chg, up="走強", flat="持平", down="回落"):
+    if chg is None:
+        return flat
+    return up if chg > 0 else (down if chg < 0 else flat)
+
+
+def _asia_handoff(holdings, watchlist_data, sectors, thematics, bottleneck, indices):
+    """§⑮ 亞太接棒:分 台/日/中/匯,依當日實際數據條件式生成。"""
+    pool = _chg_pool(holdings, watchlist_data, sectors, thematics, sum(bottleneck.values(), []))
+    tsm = _find(holdings, "TSM")
+    tsm_c = tsm.get("chg_pct") if tsm else None
+    mem = _theme_avg(["MU", "DRAM"], pool)
+    soft = _theme_avg(["IGV", "CRWD", "NET", "DOCN"], pool)
+    soxx = pool.get("SOXX")
+    crcl = _find(holdings, "CRCL")
+    crcl_c = crcl.get("chg_pct") if crcl else None
+    gold = _find(indices, "GC=F")
+    usd = _find(indices, "DX-Y.NYB")
+    tnx = _find(indices, "^TNX")
+    wti = _find(indices, "CL=F")
+
+    # 🇹🇼 台股
+    tw = [f'TSM ADR {_arrow(tsm_c) if tsm_c is not None else ""} → 台積電 2330 今日預計同步{_dirw(tsm_c)}']
+    if mem is not None:
+        if mem > 0:
+            mu = pool.get("MU"); dr = pool.get("DRAM")
+            tag = "、".join(x for x in [f'MU {_arrow(mu)}' if mu is not None else "", f'DRAM {_arrow(dr)}' if dr is not None else ""] if x)
+            tw.append(f'記憶體走強({tag})→ 封測旺矽(6223)、京元電(2449) 受惠')
+        else:
+            tw.append('記憶體回落,封測旺矽(6223)/京元電(2449) 留意跟跌')
+    if (soft is not None and soft <= -2) or (soxx is not None and soxx < 0):
+        tw.append('美股 ASIC/軟體走弱 → 世芯-KY(3661)、創意(3443) 留意情緒外溢')
+    elif soxx is not None and soxx > 1:
+        tw.append('費半走強 → 世芯-KY(3661)、創意(3443) 可望同步')
+    gold_c = gold.get("chg_pct") if gold else None
+    tw.append(f'地緣/避險{("(黃金 " + _arrow(gold_c) + ")") if gold_c is not None else ""} → 台幣關注 28.7 支撐')
+
+    # 🇯🇵 日股
+    jp = [f'半導體設備(Tokyo Electron/Disco/Lasertec)隨費半 {(_arrow(soxx)) if soxx is not None else ""} '
+          f'{"偏穩" if (soxx or 0) >= 0 else "承壓"}']
+    jp.append('避險情緒下日圓若走強,壓抑出口股')
+
+    # 🇨🇳 港股
+    cn = ['中概 AI(百度 9888.HK / 商湯 0020.HK)隨美股科技分化波動']
+    if crcl_c is not None and crcl_c <= -3:
+        cn.append(f'加密/穩定幣情緒受 CRCL {_arrow(crcl_c)} 拖累,港股相關標的留意')
+
+    # 💱 匯市
+    usd_c = usd.get("chg_pct") if usd else None
+    tnx_c = tnx.get("chg_pct") if tnx else None
+    usd_dir = "偏強" if (usd_c or 0) > 0 else ("偏弱" if (usd_c or 0) < 0 else "持平")
+    fx = [f'美元指數 {_arrow(usd_c) if usd_c is not None else ""}{("、10Y " + _arrow(tnx_c)) if tnx_c is not None else ""} → 美元{usd_dir}']
+    fx.append(f'台幣 28.7 關鍵支撐{("；黃金 " + _num(gold.get("close")) + " " + _arrow(gold_c)) if gold and gold.get("close") is not None else ""}')
+
+    def _blk(flag, items):
+        return f'<b>{flag}</b><br>' + "<br>".join("・" + i for i in items)
+    return "<br><br>".join([
+        _blk("🇹🇼 台股", tw), _blk("🇯🇵 日股", jp), _blk("🇨🇳 港股", cn), _blk("💱 匯市", fx)])
+
+
+def _next_catalysts(earnings, cal, report_date):
+    """組『下個轉折』字串:最近 2 場持股財報 + 本週經濟數據。"""
+    bits = []
+    if earnings:
+        up = [e for e in earnings if e.get("date") and e["date"] >= report_date]
+        up = up[:2] if up else earnings[:2]
+        def _d(e):
+            d = e.get("date")
+            return f'{d.month}/{d.day}' if hasattr(d, "month") else str(d)
+        if up:
+            bits.append("、".join(f'{_d(e)} {e["ticker"]} 財報' for e in up))
+    if cal and cal.get("events"):
+        today = report_date.strftime("%m/%d") if hasattr(report_date, "strftime") else ""
+        evs = [e for e in cal["events"] if e.get("date", "") >= today] or cal["events"]
+        ev = evs[:2]
+        bits.append("、".join(f'{e.get("date","")} {e.get("name","")}' for e in ev))
+    return "；".join(b for b in bits if b) or "見 §⑭ 財報雷達"
+
+
+def _observations(holdings, valid_h, best, worst, watchlist_data, sectors, thematics,
+                  bottleneck, naaim, fg, indices, earnings, cal, report_date):
+    """§⑯ 三觀察點(各含場景 A/B + 明日做什麼)+ 整體策略。資料驅動。"""
+    pool = _chg_pool(holdings, watchlist_data, sectors, thematics, sum(bottleneck.values(), []))
+    soft = _theme_avg(["IGV", "CRWD", "NET", "DOCN"], pool)
+    semi = _theme_avg(["SMH", "SOXX", "TSM", "MU"], pool)
+    vix = _find(indices, "^VIX")
+    wti = _find(indices, "CL=F")
+    pts = []
+
+    # 觀察點 1:軟硬體輪動 OR 最弱股支撐
+    soft_names = [h["ticker"] for h in holdings if h["ticker"] in ("CRWD", "NET", "DOCN")]
+    if soft is not None and semi is not None and (semi - soft) >= 1.5:
+        docn = _find(holdings, "DOCN")
+        pts.append({
+            "h": f'軟體 vs 硬體輪動 — 組合 {"/".join(soft_names)} 的試金石',
+            "ctx": f'今日軟體均 {_arrow(soft)} vs 半導體均 {_arrow(semi)},明確背離。',
+            "a": '一日獲利了結,軟體 1-3 天止穩 → 軟體持股持有不動',
+            "b": f'輪動延續多日 → 估值最高的 DOCN{("("+_arrow(docn["chg_pct"])+")") if docn and docn.get("chg_pct") is not None else ""} 最先承壓,考慮減碼',
+            "do": '盯 IGV(軟體 ETF)能否止跌;軟體核心持股支撐是否守住'})
+    elif worst:
+        pts.append({
+            "h": f'{worst["ticker"]} 最弱 {_arrow(worst["chg_pct"])} — 支撐攻防',
+            "ctx": f'{worst["ticker"]} 今日領跌,需確認是否止穩。',
+            "a": '隔日止跌收紅 → 屬個股事件,逢低留意',
+            "b": '跌勢延續 + 帶量 → 趨勢轉弱,設停損、暫不接刀',
+            "do": f'觀察 {worst["ticker"]} 前低支撐與成交量'})
+
+    # 觀察點 2:最強股 / 最強主題的動能延續
+    if best:
+        pts.append({
+            "h": f'{best["ticker"]} 最強 {_arrow(best["chg_pct"])} — 動能 vs 利多出盡',
+            "ctx": f'{best["ticker"]} 今日領漲,留意是追價熱還是見高拉回。',
+            "a": '隔日守住漲幅 → 動能延續,順勢持有',
+            "b": '高開低走 / 量縮 → 利多出盡,勿追高、等回測',
+            "do": f'觀察 {best["ticker"]} 開盤量能與前高壓力'})
+
+    # 觀察點 3:宏觀 / 情緒 / 地緣
+    macro_ctx = []
+    wti_c = wti.get("chg_pct") if wti else None
+    if wti and wti.get("close") is not None:
+        macro_ctx.append(f'WTI {_num(wti["close"])} {_arrow(wti_c)}')
+    if naaim and naaim.get("latest") is not None:
+        macro_ctx.append(f'NAAIM {naaim["latest"]}')
+    if fg and fg.get("score") is not None:
+        macro_ctx.append(f'F&G {fg["score"]}')
+    nxt = _next_catalysts(earnings, cal, report_date)
+    pts.append({
+        "h": '宏觀 / 情緒 / 地緣雙變數',
+        "ctx": "、".join(macro_ctx) + "。" if macro_ctx else "留意數據與地緣。",
+        "a": '數據偏弱 + 地緣降溫 → 降息預期回升,風險資產反彈',
+        "b": '數據偏強 + 油價走高 → 通膨憂慮、Fed 偏鷹,高估值科技再壓',
+        "do": f'關注接下來:{nxt}'})
+
+    # 整體策略
+    hold = [h["ticker"] for h in valid_h if h["chg_pct"] >= 0] or \
+           [h["ticker"] for h in holdings if h["ticker"] in ("COHR", "VRT", "TSM", "SMH")]
+    caut = [h["ticker"] for h in valid_h if h["chg_pct"] <= -2]
+    for hv in ("DOCN", "NET"):  # 高估值,僅在未列入持有時提示謹慎
+        if hv not in caut and hv not in hold and _find(holdings, hv):
+            caut.append(hv)
+    caut = [t for t in dict.fromkeys(caut) if t not in hold]  # 去重 + 不與持有衝突
+    hedge = "VIX 上升 + 地緣 → 小部位 XLE(能源)/ GLD(黃金)作對沖" if (vix and (vix.get("chg_pct") or 0) > 0) \
+            else "VIX 偏穩,維持現金部位即可"
+    strat = (f'💡 <b>整體策略</b><br>'
+             f'持有:{"、".join(hold[:6]) if hold else "—"}<br>'
+             f'謹慎:{"、".join(dict.fromkeys(caut)) if caut else "—"}<br>'
+             f'對沖:{hedge}<br>'
+             f'下個轉折:{nxt}')
+    return pts, strat
+
+
 # ── 產業學堂輪換池(週日)──────────────────────────────
 ACADEMY = {
     "robot": ("機器人供應鏈五層 — 利潤怎麼分？",
@@ -524,29 +684,29 @@ def build_mobile_html(
     P.append(f'''<div style="padding:14px 16px 8px">{_title("⑭ 財報雷達 + 經濟數據")}
 <div style="font-size:13.5px;line-height:1.9;color:#1f2937">{er or "(財報日暫缺)"}</div>{cal_html}</div>''')
 
-    # ⑮ 亞太接棒
-    tsm = _find(holdings, "TSM")
-    asia = "🇹🇼 台股：留意台積電 2330 對應 TSM ADR"
-    if tsm and tsm.get("chg_pct") is not None:
-        asia += f'（{_arrow(tsm["chg_pct"])}）'
-    asia += "；旺矽(6223)/京元電(2449) 隨記憶體連動<br>🇯🇵 半導體設備 Tokyo Electron/Disco/Lasertec<br>💱 台幣關注 28.7 區間"
+    # ⑮ 亞太接棒(分 台/日/中/匯,資料驅動)
+    asia = _asia_handoff(holdings, watchlist_data, sectors, thematics, bottleneck, indices)
     P.append(f'''<div style="padding:14px 16px 8px">{_title("⑮ 亞太接棒")}
-<div style="font-size:13.5px;line-height:1.7;color:#1f2937">{asia}</div></div>''')
+<div style="font-size:13px;line-height:1.7;color:#1f2937">{asia}</div></div>''')
 
-    # ⑯ 觀察點 + 策略
-    pts = []
-    if best:
-        pts.append(f'<b>1. {best["ticker"]}</b> 今日最強 {_arrow(best["chg_pct"])}，留意動能延續或利多出盡回測。')
-    if worst:
-        pts.append(f'<b>2. {worst["ticker"]}</b> 今日最弱 {_arrow(worst["chg_pct"])}，確認支撐與止跌訊號。')
-    pts.append('<b>3.</b> 觀察情緒指標(NAAIM/F&G)是否轉向極端、市場廣度是否擴散。')
-    ph = "".join(_box(p, "#fff7ed", "", "#1f2937") for p in pts)
-    strat = (f'💡 <b>整體策略</b><br>持有：強勢核心({best["ticker"] if best else "—"})<br>'
-             f'謹慎：追高、情緒過熱下的 beta<br>對沖：黃金(GLD)<br>'
-             f'下個轉折：見財報雷達 + 情緒是否破極端')
+    # ⑯ 今日 3 觀察點(各含場景 A/B + 明日做什麼)+ 整體策略
+    cal_obs = _load_json("manual_calendar.json")
+    obs_pts, strat = _observations(holdings, valid_h, best, worst, watchlist_data, sectors,
+                                   thematics, bottleneck, naaim, fg, indices, earnings,
+                                   cal_obs, report_date)
+    obs_html = ""
+    for i, p in enumerate(obs_pts, 1):
+        obs_html += (
+            f'<div style="background:#fff7ed;border-radius:8px;padding:10px;margin-bottom:8px;'
+            f'font-size:13px;line-height:1.6;color:#1f2937">'
+            f'<b>{i}. {p["h"]}</b><br>'
+            f'<span style="color:#475569">{p["ctx"]}</span><br>'
+            f'<span style="color:#15803d">場景A：{p["a"]}</span><br>'
+            f'<span style="color:#b91c1c">場景B：{p["b"]}</span><br>'
+            f'<span style="color:#1d4ed8">👉 明日做什麼：{p["do"]}</span></div>')
     P.append(f'''<div style="padding:14px 16px 16px">{_title("⑯ 今日 3 觀察點", "#dc2626")}
-<div style="font-size:14px;line-height:1.6">{ph}</div>
-<div style="background:#0f172a;color:#e2e8f0;border-radius:8px;padding:12px;margin-top:12px;font-size:13.5px;line-height:1.7">{strat}</div></div>''')
+<div style="font-size:14px;line-height:1.6">{obs_html}</div>
+<div style="background:#0f172a;color:#e2e8f0;border-radius:8px;padding:12px;margin-top:12px;font-size:13px;line-height:1.75">{strat}</div></div>''')
 
     # footer
     v = "指數/持股/瓶頸/ETF(yfinance)"
