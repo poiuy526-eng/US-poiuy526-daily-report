@@ -78,7 +78,7 @@ REPORT_DATE = date.today()
 
 # --- 推送設定(預設關閉)---
 AUTO_SEND_NOTION = False
-AUTO_SEND_GMAIL = False
+AUTO_SEND_GMAIL = True
 GMAIL_RECIPIENT = "poiuy526@gmail.com"
 NOTION_PARENT_ID = "6aa7b6ca-147c-40df-9de0-083cbeb13978"
 
