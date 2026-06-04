@@ -73,6 +73,44 @@ def _find(lst, ticker):
     return next((q for q in lst if q.get("ticker") == ticker), None)
 
 
+def _theme_avg(tickers, pool):
+    vals = [pool[t] for t in tickers if t in pool]
+    return (sum(vals) / len(vals)) if vals else None
+
+
+def _pick_debate(holdings, watchlist_data, sectors, thematics, bottleneck,
+                 debate_pool, stock_debate):
+    """依當日資料自動選辯題,回傳 (debate_dict, data_line)。
+    優先序:大幅波動個股(±8%, 有專屬辯題) > 軟硬體輪動分歧 > AI capex(預設)。"""
+    # 當日漲跌池
+    pool = {}
+    for q in (holdings + watchlist_data + sectors + thematics + sum(bottleneck.values(), [])):
+        if q.get("chg_pct") is not None and q["ticker"] not in pool:
+            pool[q["ticker"]] = q["chg_pct"]
+
+    # 1) 大幅波動個股(優先觸發專屬辯題)
+    big = [(t, c) for t, c in pool.items() if t in stock_debate and abs(c) >= 8]
+    if big:
+        big.sort(key=lambda x: abs(x[1]), reverse=True)
+        t, c = big[0]
+        return stock_debate[t], f'{t} {_arrow(c)}(單日波動逾 8%,觸發專屬辯題)'
+
+    # 2) 軟硬體輪動分歧
+    soft = _theme_avg(["IGV", "CRWD", "NET", "DOCN"], pool)
+    semi = _theme_avg(["SMH", "SOXX", "TSM", "MU", "DRAM"], pool)
+    if soft is not None and semi is not None and abs(soft - semi) >= 1.5:
+        dl = f'AI 軟體均 {_arrow(soft)} vs 半導體均 {_arrow(semi)}(差 {abs(soft-semi):.2f}pp)'
+        return debate_pool["software_rotation"], dl
+
+    # 3) 太空股顯著走弱
+    space = _theme_avg(["RKLB", "NASA", "ITA"], pool)
+    if space is not None and space <= -4:
+        return debate_pool["space_ipo"], f'太空/國防均 {_arrow(space)}'
+
+    # 4) 預設:AI capex 永續辯論
+    return debate_pool["ai_capex"], None
+
+
 # ── 產業學堂輪換池(週日)──────────────────────────────
 ACADEMY = {
     "robot": ("機器人供應鏈五層 — 利潤怎麼分？",
@@ -230,6 +268,22 @@ def build_mobile_html(
         nh.append('<div style="color:#94a3b8;font-size:13px">(大盤新聞暫缺)</div>')
     P.append(f'''<div style="padding:14px 16px 8px">{_title("④ 今日新聞快報 · 大盤重大事件")}
 <div style="font-size:11.5px;color:#94a3b8;margin-bottom:6px">個股新聞請見 ⑪ 核心持股</div>{"".join(nh)}</div>''')
+
+    # ⑤ 真偽辯論台(資料驅動選題:大幅波動個股 > 軟硬體輪動 > AI capex)
+    from knowledge import DEBATE_POOL, STOCK_DEBATE
+    debate, data_line = _pick_debate(holdings, watchlist_data, sectors, thematics,
+                                     bottleneck, DEBATE_POOL, STOCK_DEBATE)
+    if debate:
+        bull = "".join(f'<li>{x}</li>' for x in debate["bull"])
+        bear = "".join(f'<li>{x}</li>' for x in debate["bear"])
+        P.append(f'''<div style="padding:14px 16px 8px">{_title("⑤ 真偽辯論台", "#ea580c")}
+<div style="font-size:13.5px;font-weight:700;color:#0f172a;margin-bottom:8px">主題：{debate["topic"]}</div>
+{(f'<div style="font-size:12px;color:#64748b;margin-bottom:8px">📊 當日數據：{data_line}</div>') if data_line else ""}
+<div style="display:flex;gap:8px;flex-wrap:wrap">
+<div style="flex:1;min-width:200px;border:1px solid #bbf7d0;background:#f0fdf4;border-radius:8px;padding:10px;font-size:12.5px;line-height:1.55;color:#14532d"><b>🐂 多方</b><ul style="margin:4px 0 0 16px;padding:0">{bull}</ul></div>
+<div style="flex:1;min-width:200px;border:1px solid #fecaca;background:#fef2f2;border-radius:8px;padding:10px;font-size:12.5px;line-height:1.55;color:#7f1d1d"><b>🐻 空方</b><ul style="margin:4px 0 0 16px;padding:0">{bear}</ul></div>
+</div>
+<div style="background:#eef2ff;border-radius:8px;padding:10px;margin-top:8px;font-size:12.5px;line-height:1.6;color:#3730a3"><b>📊 Claude 評估：</b>{debate["assess"]}</div></div>''')
 
     # ⑥ 瓶頸輪動(每環節一張卡 + 議價力/結構訊號/觀察)
     from knowledge import BOTTLENECK_KB
@@ -421,16 +475,42 @@ def build_mobile_html(
     P.append(f'''<div style="padding:14px 16px 8px">{_title("⑫ 十倍股觀察池")}
 {"".join(c for c in cards if c)}</div>''')
 
-    # ⑬ 操盤指令
+    # ⑬ 操盤指令(資料驅動多級分類:重點 / 觀察 / 監控 / 警示 / 觀察池)
     orders = []
+    i = 0
+    def _ord(level, text):
+        nonlocal i
+        i += 1
+        return _row([_td(level, "left", "#1f2937", "400"), _td(text)], i % 2 == 1)
+    # ★★★★ 重點:當日最強核心持股
     if best:
-        orders.append(_row([_td("★★★★ 重點"), _td(f'{best["ticker"]} 持有，強勢但留意財報前勿追高')], True))
+        bkb = HOLDINGS_KB.get(best["ticker"], {})
+        orders.append(_ord("★★★★ 重點", f'{best["ticker"]} 持有,當日最強({_arrow(best["chg_pct"])});'
+                           f'強勢勿追高,回檔分批{("｜"+bkb.get("催化劑")) if bkb.get("催化劑") else ""}'))
+    # ⚠️ 警示:跌逾 3% 的持股(設停損)
+    alerts = sorted([h for h in valid_h if h["chg_pct"] <= -3], key=lambda x: x["chg_pct"])
+    for a in alerts[:3]:
+        akb = HOLDINGS_KB.get(a["ticker"], {})
+        orders.append(_ord("⚠️ 警示", f'{a["ticker"]} {_arrow(a["chg_pct"])},確認支撐、跌破設停損'
+                           f'{("｜風險:"+akb.get("風險")) if akb.get("風險") else ""}'))
+    # ★★ 觀察:小跌(0~-3%)的核心持股
+    watch = sorted([h for h in valid_h if -3 < h["chg_pct"] < 0], key=lambda x: x["chg_pct"])
+    for w in watch[:3]:
+        orders.append(_ord("★★ 觀察", f'{w["ticker"]} {_arrow(w["chg_pct"])},屬正常回落,持有觀察'))
+    # 🟢 監控:小漲/持平(非最強)的核心持股
+    mons = [h for h in valid_h if h["chg_pct"] >= 0 and (not best or h["ticker"] != best["ticker"])]
+    if mons:
+        names = "、".join(f'{m["ticker"]}({_arrow(m["chg_pct"])})' for m in mons[:4])
+        orders.append(_ord("🟢 監控", f'{names} 持有,順勢不加碼'))
+    # 🌟 觀察池:組合外觀察名單
+    pool_names = []
     if watchlist_data:
-        orders.append(_row([_td("🌟 觀察池"), _td(f'{watchlist_data[0]["ticker"]} 回支撐區留意')], False))
-    if worst:
-        orders.append(_row([_td("⚠️ 警示"), _td(f'{worst["ticker"]} 確認支撐，跌破設停損')], True))
+        w0 = watchlist_data[0]
+        pool_names.append(f'{w0["ticker"]}({_arrow(w0["chg_pct"])})' if w0.get("chg_pct") is not None else w0["ticker"])
+    pool_names.append("SpaceX IPO 6/12 後評估太空池")
+    orders.append(_ord("🌟 觀察池", "、".join(pool_names) + " — 等催化/估值重設再進"))
     P.append(f'''<div style="padding:14px 16px 8px">{_title("⑬ 操盤指令")}
-<table style="width:100%;border-collapse:collapse;font-size:13.5px">{"".join(orders)}</table></div>''')
+<table style="width:100%;border-collapse:collapse;font-size:13px">{"".join(orders)}</table></div>''')
 
     # ⑭ 財報雷達 + 經濟數據
     er = ""
